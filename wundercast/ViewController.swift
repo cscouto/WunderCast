@@ -29,19 +29,87 @@
 import UIKit
 import RxSwift
 import RxCocoa
+import MapKit
+import CoreLocation
 
 class ViewController: UIViewController {
-  @IBOutlet private var searchCityName: UITextField!
-  @IBOutlet private var tempLabel: UILabel!
-  @IBOutlet private var humidityLabel: UILabel!
-  @IBOutlet private var iconLabel: UILabel!
-  @IBOutlet private var cityNameLabel: UILabel!
+    @IBOutlet private var mapView: MKMapView!
+    @IBOutlet private var mapButton: UIButton!
+    @IBOutlet private var geoLocationButton: UIButton!
+    @IBOutlet private var activityIndicator: UIActivityIndicatorView!
+    @IBOutlet private var searchCityName: UITextField!
+    @IBOutlet private var tempLabel: UILabel!
+    @IBOutlet private var humidityLabel: UILabel!
+    @IBOutlet private var iconLabel: UILabel!
+    @IBOutlet private var cityNameLabel: UILabel!
+    private let 
+    let disposeBag = DisposeBag()
 
   override func viewDidLoad() {
     super.viewDidLoad()
-    // Do any additional setup after loading the view, typically from a nib.
-
     style()
+    
+    let searchInput = searchCityName.rx
+        .controlEvent(.editingDidEndOnExit)
+        .map { self.searchCityName.text ?? ""}
+        .filter { !$0.isEmpty }
+    
+    let search = searchInput
+        .flatMapLatest { text in
+            return ApiController.shared
+                .currentWeather(city: text)
+        }
+        .asDriver(onErrorJustReturn: ApiController.Weather.empty)
+    
+    let running = Observable
+        .merge(
+            searchInput.map { _ in true },
+            search.map { _ in false }.asObservable()
+        )
+        .startWith(true)
+        .asDriver(onErrorJustReturn: false)
+    
+    running
+        .skip(1)
+        .drive(activityIndicator.rx.isAnimating)
+        .disposed(by: disposeBag)
+    
+    running
+        .drive(tempLabel.rx.isHidden)
+        .disposed(by: disposeBag)
+    
+    running
+        .drive(humidityLabel.rx.isHidden)
+        .disposed(by: disposeBag)
+    
+    running
+        .drive(iconLabel.rx.isHidden)
+        .disposed(by: disposeBag)
+    
+    running
+        .drive(cityNameLabel.rx.isHidden)
+        .disposed(by: disposeBag)
+    
+    search
+        .map { "\($0.temperature) C"}
+        .drive(tempLabel.rx.text)
+        .disposed(by: disposeBag)
+    
+    search
+        .map { "\($0.humidity)%"}
+        .drive(humidityLabel.rx.text)
+        .disposed(by: disposeBag)
+    
+    search
+        .map { $0.icon }
+        .drive(iconLabel.rx.text)
+        .disposed(by: disposeBag)
+    
+    search
+        .map { $0.cityName }
+        .drive(cityNameLabel.rx.text)
+        .disposed(by: disposeBag)
+        
   }
 
   override func viewDidAppear(_ animated: Bool) {
